@@ -8,7 +8,12 @@ Select th sentry-cocoa root folder to open the app profile:
 
 1. Set a `SENTRY_AUTH_TOKEN` in 'Run Script' build phase.
 
+2. Put your DSN key in `sentry-cocoa/AppDelegate.swift`
+
 2. sentry-cli must be installed at /usr/local/bin
+
+3. Do not run in debugging mode or else unhandled exceptions won't send to Sentry:  
+Edit Schemes > 'Run' action for your scheme > Info tab > uncheck 'Debug executable' box
 
 3. Click the Run/play button targeting iPhone 11
 

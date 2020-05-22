@@ -1,1 +1,7 @@
 .DS_Store
+
+sentry-cocoa.xcodeproj/project.pbxproj
+Pods/Pods.xcodeproj/xcuserdata/*
+sentry-cocoa.xcodeproj/xcshareddata/
+sentry-cocoa.xcodeproj/xcuserdata/*
+sentry-cocoa.xcworkspace/xcuserdata/*
