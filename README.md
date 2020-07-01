@@ -12,8 +12,10 @@ Select th sentry-cocoa root folder to open the app profile:
 
 2. sentry-cli must be installed at /usr/local/bin
 
-3. Do not run in debugging mode or else unhandled exceptions won't send to Sentry:  
-Edit Schemes > 'Run' action for your scheme > Info tab > uncheck 'Debug executable' box
+3. If you throw an Unhandled Exception...  
+Then click 'Stop' in Xcode, to stop (detach) the debugger (or else unhandled won't send to Sentry) then re-open the app within the Simulator, and it will now appear in Sentry ;)
+
+Consider detaching the debugger, before starting your demo.
 
 3. Click the Run/play button targeting iPhone 11
 
@@ -61,3 +63,5 @@ could auto-increment ^ the minor version
 ## Documentation/Resources
 
 https://docs.sentry.io/clients/cocoa/
+
+OPTIONAL -  turn off the debugger via Edit Schemes > 'Run' action for your scheme > Info tab > uncheck 'Debug executable' box

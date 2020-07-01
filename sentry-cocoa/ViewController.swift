@@ -62,7 +62,6 @@ class ViewController: UIViewController {
         } catch let error as NSError {
             SentrySDK.capture(error: error) { (scope) in
                 scope.setLevel(.fatal)
-                scope.setExtra(value:Thread.callStackSymbols, key:"Error Stack Trace")
             }
         }
     }
