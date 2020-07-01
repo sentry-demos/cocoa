@@ -1,28 +1,16 @@
-//
-//  SentryDebugMeta.m
-//  Sentry
-//
-//  Created by Daniel Griesser on 10/05/2017.
-//  Copyright © 2017 Sentry. All rights reserved.
-//
-
-#if __has_include(<Sentry/Sentry.h>)
-
-#import <Sentry/SentryDebugMeta.h>
-
-#else
 #import "SentryDebugMeta.h"
-#endif
 
 NS_ASSUME_NONNULL_BEGIN
 
 @implementation SentryDebugMeta
 
-- (instancetype)init {
+- (instancetype)init
+{
     return [super init];
 }
 
-- (NSDictionary<NSString *, id> *)serialize {
+- (NSDictionary<NSString *, id> *)serialize
+{
     NSMutableDictionary *serializedData = [NSMutableDictionary new];
 
     [serializedData setValue:self.uuid forKey:@"uuid"];
@@ -30,6 +18,7 @@ NS_ASSUME_NONNULL_BEGIN
     [serializedData setValue:self.imageAddress forKey:@"image_addr"];
     [serializedData setValue:self.imageSize forKey:@"image_size"];
     [serializedData setValue:[self.name lastPathComponent] forKey:@"name"];
+    [serializedData setValue:self.imageVmAddress forKey:@"image_vmaddr"];
 
     return serializedData;
 }

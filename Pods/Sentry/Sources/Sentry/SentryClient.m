@@ -1,112 +1,143 @@
-//
-//  SentryClient.m
-//  Sentry
-//
-//  Created by Daniel Griesser on 02/05/2017.
-//  Copyright © 2017 Sentry. All rights reserved.
-//
-
-#if __has_include(<Sentry/Sentry.h>)
-
-#import <Sentry/SentryClient.h>
-#import <Sentry/SentryLog.h>
-#import <Sentry/SentryDsn.h>
-#import <Sentry/SentryError.h>
-#import <Sentry/SentryUser.h>
-#import <Sentry/SentryQueueableRequestManager.h>
-#import <Sentry/SentryEvent.h>
-#import <Sentry/SentryNSURLRequest.h>
-#import <Sentry/SentryInstallation.h>
-#import <Sentry/SentryFileManager.h>
-#import <Sentry/SentryBreadcrumbTracker.h>
-#import <Sentry/SentryCrash.h>
-#import <Sentry/SentryOptions.h>
-#import <Sentry/SentryScope.h>
-#import <Sentry/SentryTransport.h>
-#import <Sentry/SentrySDK.h>
-#import <Sentry/SentryIntegrationProtocol.h>
-#import <Sentry/SentryGlobalEventProcessor.h>
-#import <Sentry/SentryEnvelope.h>
-
-#else
 #import "SentryClient.h"
-#import "SentryLog.h"
-#import "SentryDsn.h"
-#import "SentryError.h"
-#import "SentryUser.h"
-#import "SentryQueueableRequestManager.h"
-#import "SentryEvent.h"
-#import "SentryNSURLRequest.h"
-#import "SentryInstallation.h"
-#import "SentryFileManager.h"
 #import "SentryBreadcrumbTracker.h"
 #import "SentryCrash.h"
-#import "SentryOptions.h"
-#import "SentryScope.h"
-#import "SentryTransport.h"
-#import "SentrySDK.h"
-#import "SentryIntegrationProtocol.h"
-#import "SentryGlobalEventProcessor.h"
+#import "SentryCrashDefaultBinaryImageProvider.h"
+#import "SentryCrashDefaultMachineContextWrapper.h"
+#import "SentryCrashInstallationReporter.h"
+#import "SentryDebugMetaBuilder.h"
+#import "SentryDsn.h"
 #import "SentryEnvelope.h"
-#endif
+#import "SentryError.h"
+#import "SentryEvent.h"
+#import "SentryFileManager.h"
+#import "SentryGlobalEventProcessor.h"
+#import "SentryHttpTransport.h"
+#import "SentryIntegrationProtocol.h"
+#import "SentryLog.h"
+#import "SentryMeta.h"
+#import "SentryOptions.h"
+#import "SentryQueueableRequestManager.h"
+#import "SentrySDK.h"
+#import "SentryScope.h"
+#import "SentrySession.h"
+#import "SentryStacktraceBuilder.h"
+#import "SentryThread.h"
+#import "SentryThreadInspector.h"
+#import "SentryTransport.h"
+#import "SentryTransportFactory.h"
+#import "SentryUser.h"
 
 #if SENTRY_HAS_UIKIT
-#import <UIKit/UIKit.h>
+#    import <UIKit/UIKit.h>
 #endif
 
 NS_ASSUME_NONNULL_BEGIN
 
-@interface SentryClient ()
+@interface
+SentryClient ()
 
-@property(nonatomic, strong) SentryTransport* transport;
+@property (nonatomic, strong) id<SentryTransport> transport;
+@property (nonatomic, strong) SentryFileManager *fileManager;
+@property (nonatomic, strong) SentryDebugMetaBuilder *debugMetaBuilder;
+@property (nonatomic, strong) SentryThreadInspector *threadInspector;
 
 @end
 
 @implementation SentryClient
 
-@synthesize options = _options;
-@synthesize transport = _transport;
-
-#pragma mark Initializer
-
-- (_Nullable instancetype)initWithOptions:(SentryOptions *)options {
+- (_Nullable instancetype)initWithOptions:(SentryOptions *)options
+{
     if (self = [super init]) {
         self.options = options;
-        [self.transport sendAllStoredEvents];
+
+        SentryCrashDefaultBinaryImageProvider *provider =
+            [[SentryCrashDefaultBinaryImageProvider alloc] init];
+
+        self.debugMetaBuilder =
+            [[SentryDebugMetaBuilder alloc] initWithBinaryImageProvider:provider];
+
+        SentryStacktraceBuilder *stacktraceBuilder = [[SentryStacktraceBuilder alloc] init];
+        id<SentryCrashMachineContextWrapper> machineContextWrapper =
+            [[SentryCrashDefaultMachineContextWrapper alloc] init];
+
+        self.threadInspector =
+            [[SentryThreadInspector alloc] initWithStacktraceBuilder:stacktraceBuilder
+                                            andMachineContextWrapper:machineContextWrapper];
     }
     return self;
 }
 
-- (SentryTransport *)transport {
+/** Internal constructor for testing */
+- (instancetype)initWithOptions:(SentryOptions *)options
+                   andTransport:(id<SentryTransport>)transport
+                 andFileManager:(SentryFileManager *)fileManager
+{
+    self = [self initWithOptions:options];
+
+    self.transport = transport;
+    self.fileManager = fileManager;
+
+    return self;
+}
+
+- (id<SentryTransport>)transport
+{
     if (_transport == nil) {
-        _transport = [[SentryTransport alloc] initWithOptions:self.options];
+        _transport = [SentryTransportFactory initTransport:self.options
+                                         sentryFileManager:self.fileManager];
     }
     return _transport;
 }
 
-- (NSString *_Nullable)captureMessage:(NSString *)message withScope:(SentryScope *_Nullable)scope {
+- (SentryFileManager *)fileManager
+{
+    if (_fileManager == nil) {
+        NSError *error = nil;
+        SentryFileManager *fileManager =
+            [[SentryFileManager alloc] initWithDsn:self.options.parsedDsn didFailWithError:&error];
+        if (nil != error) {
+            [SentryLog logWithMessage:(error).localizedDescription andLevel:kSentryLogLevelError];
+            return nil;
+        }
+        _fileManager = fileManager;
+    }
+    return _fileManager;
+}
+
+- (NSString *_Nullable)captureMessage:(NSString *)message withScope:(SentryScope *_Nullable)scope
+{
     SentryEvent *event = [[SentryEvent alloc] initWithLevel:kSentryLevelInfo];
-    // TODO: Attach stacktrace?
     event.message = message;
-    return [self captureEvent:event withScope:scope];
+    return [self sendEvent:event withScope:scope alwaysAttachStacktrace:NO];
 }
 
-- (NSString *_Nullable)captureException:(NSException *)exception withScope:(SentryScope *_Nullable)scope {
+- (NSString *_Nullable)captureException:(NSException *)exception
+                              withScope:(SentryScope *_Nullable)scope
+{
     SentryEvent *event = [[SentryEvent alloc] initWithLevel:kSentryLevelError];
-    // TODO: Capture Stacktrace
     event.message = exception.reason;
-    return [self captureEvent:event withScope:scope];
+    return [self sendEvent:event withScope:scope alwaysAttachStacktrace:YES];
 }
 
-- (NSString *_Nullable)captureError:(NSError *)error withScope:(SentryScope *_Nullable)scope {
+- (NSString *_Nullable)captureError:(NSError *)error withScope:(SentryScope *_Nullable)scope
+{
     SentryEvent *event = [[SentryEvent alloc] initWithLevel:kSentryLevelError];
-    // TODO: Capture Stacktrace
     event.message = error.localizedDescription;
-    return [self captureEvent:event withScope:scope];
+    return [self sendEvent:event withScope:scope alwaysAttachStacktrace:YES];
 }
 
-- (NSString *_Nullable)captureEvent:(SentryEvent *)event withScope:(SentryScope *_Nullable)scope {
-    SentryEvent *preparedEvent = [self prepareEvent:event withScope:scope];
+- (NSString *_Nullable)captureEvent:(SentryEvent *)event withScope:(SentryScope *_Nullable)scope
+{
+    return [self sendEvent:event withScope:scope alwaysAttachStacktrace:NO];
+}
+
+- (NSString *_Nullable)sendEvent:(SentryEvent *)event
+                       withScope:(SentryScope *_Nullable)scope
+          alwaysAttachStacktrace:(BOOL)alwaysAttachStacktrace
+{
+    SentryEvent *preparedEvent = [self prepareEvent:event
+                                          withScope:scope
+                             alwaysAttachStacktrace:alwaysAttachStacktrace];
     if (nil != preparedEvent) {
         if (nil != self.options.beforeSend) {
             event = self.options.beforeSend(event);
@@ -119,7 +150,21 @@ NS_ASSUME_NONNULL_BEGIN
     return nil;
 }
 
-- (NSString *_Nullable)captureEnvelope:(SentryEnvelope *)envelope {
+- (void)captureSession:(SentrySession *)session
+{
+    SentryEnvelope *envelope = [[SentryEnvelope alloc] initWithSession:session];
+    [self captureEnvelope:envelope];
+}
+
+// TODO: We remove this function It is not in the header and nobody uses it
+- (void)captureSessions:(NSArray<SentrySession *> *)sessions
+{
+    SentryEnvelope *envelope = [[SentryEnvelope alloc] initWithSessions:sessions];
+    [self captureEnvelope:envelope];
+}
+
+- (NSString *_Nullable)captureEnvelope:(SentryEnvelope *)envelope
+{
     // TODO: What is about beforeSend
     [self.transport sendEnvelope:envelope withCompletionHandler:nil];
     return envelope.header.eventId;
@@ -127,36 +172,36 @@ NS_ASSUME_NONNULL_BEGIN
 
 /**
  * returns BOOL chance of YES is defined by sampleRate.
- * if sample rate isn't within 0.0 - 1.0 it returns YES (like if sampleRate is 1.0)
+ * if sample rate isn't within 0.0 - 1.0 it returns YES (like if sampleRate
+ * is 1.0)
  */
-- (BOOL)checkSampleRate:(NSNumber *)sampleRate {
+- (BOOL)checkSampleRate:(NSNumber *)sampleRate
+{
     if (nil == sampleRate || [sampleRate floatValue] < 0 || [sampleRate floatValue] > 1) {
         return YES;
     }
     return ([sampleRate floatValue] >= ((double)arc4random() / 0x100000000));
 }
 
-#pragma mark prepareEvent
-
 - (SentryEvent *_Nullable)prepareEvent:(SentryEvent *)event
-                             withScope:(SentryScope *_Nullable)scope {
+                             withScope:(SentryScope *_Nullable)scope
+                alwaysAttachStacktrace:(BOOL)alwaysAttachStacktrace
+{
     NSParameterAssert(event);
-    
+
     if (NO == [self.options.enabled boolValue]) {
-        [SentryLog logWithMessage:@"SDK is disabled, will not do anything" andLevel:kSentryLogLevelDebug];
+        [SentryLog logWithMessage:@"SDK is disabled, will not do anything"
+                         andLevel:kSentryLogLevelDebug];
         return nil;
     }
-    
+
     if (NO == [self checkSampleRate:self.options.sampleRate]) {
-        [SentryLog logWithMessage:@"Event got sampled, will not send the event" andLevel:kSentryLogLevelDebug];
+        [SentryLog logWithMessage:@"Event got sampled, will not send the event"
+                         andLevel:kSentryLogLevelDebug];
         return nil;
-    }    
+    }
 
     NSDictionary *infoDict = [[NSBundle mainBundle] infoDictionary];
-    if (nil != infoDict && nil == event.releaseName) {
-        event.releaseName = [NSString stringWithFormat:@"%@@%@+%@", infoDict[@"CFBundleIdentifier"], infoDict[@"CFBundleShortVersionString"],
-            infoDict[@"CFBundleVersion"]];
-    }
     if (nil != infoDict && nil == event.dist) {
         event.dist = infoDict[@"CFBundleVersion"];
     }
@@ -164,7 +209,9 @@ NS_ASSUME_NONNULL_BEGIN
     // Use the values from SentryOptions as a fallback,
     // in case not yet set directly in the event nor in the scope:
     NSString *releaseName = self.options.releaseName;
-    if (nil != releaseName) {
+    if (nil == event.releaseName && nil != releaseName) {
+        // If no release was already set (i.e: crashed on an older version) use
+        // current release name
         event.releaseName = releaseName;
     }
 
@@ -172,26 +219,46 @@ NS_ASSUME_NONNULL_BEGIN
     if (nil != dist) {
         event.dist = dist;
     }
-    
+
     NSString *environment = self.options.environment;
     if (nil != environment && nil == event.environment) {
         event.environment = environment;
     }
-    
+
+    NSMutableDictionary *sdk =
+        @{ @"name" : SentryMeta.sdkName, @"version" : SentryMeta.versionString }.mutableCopy;
+    if (nil != sdk && nil == event.sdk) {
+        if (event.extra[@"__sentry_sdk_integrations"]) {
+            [sdk setValue:event.extra[@"__sentry_sdk_integrations"] forKey:@"integrations"];
+        }
+        event.sdk = sdk;
+    }
+
+    if (alwaysAttachStacktrace || [self.options.attachStacktrace boolValue] ||
+        [event.exceptions count] > 0) {
+        event.debugMeta = [self.debugMetaBuilder buildDebugMeta];
+        // We don't want to add the stacktrace of attaching the stacktrace.
+        // Therefore we skip three frames.
+        event.threads = [self.threadInspector getCurrentThreadsSkippingFrames:3];
+    }
+
     if (nil != scope) {
         event = [scope applyToEvent:event maxBreadcrumb:self.options.maxBreadcrumbs];
     }
-    
+
     return [self callEventProcessors:event];
 }
 
-- (SentryEvent *)callEventProcessors:(SentryEvent *)event {
+- (SentryEvent *_Nullable)callEventProcessors:(SentryEvent *)event
+{
     SentryEvent *newEvent = event;
 
     for (SentryEventProcessor processor in SentryGlobalEventProcessor.shared.processors) {
         newEvent = processor(newEvent);
         if (nil == newEvent) {
-            [SentryLog logWithMessage:@"SentryScope callEventProcessors: An event processor decided to remove this event." andLevel:kSentryLogLevelDebug];
+            [SentryLog logWithMessage:@"SentryScope callEventProcessors: An event "
+                                      @"processor decided to remove this event."
+                             andLevel:kSentryLogLevelDebug];
             break;
         }
     }

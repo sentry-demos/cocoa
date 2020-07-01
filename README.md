@@ -47,6 +47,16 @@ The demo app enriches every event with: Custom context, breadcrumbs, tags, user 
     
     Upload the Debug Symbols to the target project and associate the commits to the release object.
 
+## How to Upgrade SDK
+Check out a new branch, PR  
+1. Xcode -> Podfile, increment the version (in VSCode and XCode)
+2. `pod update`
+2. Click 'Play' button
+
+
+could auto-increment ^ the minor version
+
+
 
 ## Documentation/Resources
 
