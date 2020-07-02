@@ -12,16 +12,20 @@ Select th sentry-cocoa root folder to open the app profile:
 
 2. sentry-cli must be installed at /usr/local/bin
 
-3. If you throw an Unhandled Exception...  
-Then click 'Stop' in Xcode, to stop (detach) the debugger (or else unhandled won't send to Sentry) then re-open the app within the Simulator, and it will now appear in Sentry ;)
-
-Consider detaching the debugger, before starting your demo.
-
 3. Click the Run/play button targeting iPhone 11
 
-4. Click on Stop to disconnect the debugger from the app in the simulator
+4. In **Simulator**, Launch the sentry-cocoa app
 
-In **Simulator**, Launch the sentry-cocoa app
+5. Press a button to generate an Error
+
+4. Click on Stop to disconnect the debugger from the app in the simulator  
+Or else unhandled errors won't get sent to Sentry. Re-open the app within the Simulator, and it will now appear in Sentry. Don't click Play again, or else debugger will re-connect. Just need to keep re-launching the app inside the simulator. Consider detaching the debugger, before presenting.
+
+## How to Upgrade SDK
+Check out a new branch so you can open a PR.    
+1. Xcode -> Podfile, increment the sdk version.
+2. `pod update`
+2. Click 'Play' button
 
 ## Flow/Demo
 
@@ -49,19 +53,8 @@ The demo app enriches every event with: Custom context, breadcrumbs, tags, user 
     
     Upload the Debug Symbols to the target project and associate the commits to the release object.
 
-## How to Upgrade SDK
-Check out a new branch, PR  
-1. Xcode -> Podfile, increment the version (in VSCode and XCode)
-2. `pod update`
-2. Click 'Play' button
-
-
-could auto-increment ^ the minor version
-
-
-
 ## Documentation/Resources
 
 https://docs.sentry.io/clients/cocoa/
 
-OPTIONAL -  turn off the debugger via Edit Schemes > 'Run' action for your scheme > Info tab > uncheck 'Debug executable' box
+Optional - turn off the debugger via Edit Schemes > 'Run' action for your scheme > Info tab > uncheck 'Debug executable' box.

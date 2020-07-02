@@ -20,7 +20,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             options.debug = true
             options.environment = "Production"
             options.enableAutoSessionTracking = true
-            options.attachStacktrace = true // Messages
+            options.attachStacktrace = true // so Message has stack trace
         }
         
         return true
