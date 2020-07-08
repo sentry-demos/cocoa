@@ -1,47 +1,171 @@
-//
-//  SentryHub.m
-//  Sentry
-//
-//  Created by Klemens Mantzos on 11.11.19.
-//  Copyright © 2019 Sentry. All rights reserved.
-//
-
-#if __has_include(<Sentry/Sentry.h>)
-#import <Sentry/SentryHub.h>
-#import <Sentry/SentryClient.h>
-#import <Sentry/SentryBreadcrumbTracker.h>
-#import <Sentry/SentryIntegrationProtocol.h>
-#import <Sentry/SentrySDK.h>
-#import <Sentry/SentryLog.h>
-#else
 #import "SentryHub.h"
-#import "SentryClient.h"
 #import "SentryBreadcrumbTracker.h"
+#import "SentryClient.h"
+#import "SentryCrash.h"
+#import "SentryFileManager.h"
 #import "SentryIntegrationProtocol.h"
-#import "SentrySDK.h"
 #import "SentryLog.h"
-#endif
+#import "SentrySDK.h"
 
-@interface SentryHub()
+@interface
+SentryHub ()
 
 @property (nonatomic, strong) SentryClient *_Nullable client;
 @property (nonatomic, strong) SentryScope *_Nullable scope;
-@property (nonatomic, strong) NSMutableArray<NSObject<SentryIntegrationProtocol> *> *installedIntegrations;
 
 @end
 
-@implementation SentryHub
+@implementation SentryHub {
+    NSObject *_sessionLock;
+}
 
 @synthesize scope;
 
-- (instancetype)init {
+- (instancetype)initWithClient:(SentryClient *_Nullable)client
+                      andScope:(SentryScope *_Nullable)scope
+{
     if (self = [super init]) {
-        self.scope = [self getScope];
+        [self bindClient:client];
+        self.scope = scope;
+        _sessionLock = [[NSObject alloc] init];
+        _installedIntegrations = [[NSMutableArray alloc] init];
     }
     return self;
 }
 
-- (NSString *_Nullable)captureEvent:(SentryEvent *)event withScope:(SentryScope *_Nullable)scope {
+- (void)startSession
+{
+    SentrySession *lastSession = nil;
+    SentryScope *scope = [self getScope];
+    SentryClient *client = [self getClient];
+    SentryOptions *options = [client options];
+    if (nil == options || nil == options.releaseName) {
+        [SentryLog
+            logWithMessage:[NSString stringWithFormat:@"No option or release to start a session."]
+                  andLevel:kSentryLogLevelError];
+        return;
+    }
+    @synchronized(_sessionLock) {
+        if (nil != _session) {
+            lastSession = _session;
+        }
+        _session = [[SentrySession alloc] initWithReleaseName:options.releaseName];
+        [scope applyToSession:_session];
+
+        [self storeCurrentSession:_session];
+        // TODO: Capture outside the lock. Not the reference in the scope.
+        [self captureSession:_session];
+    }
+    [lastSession endSessionExitedWithTimestamp:[NSDate date]];
+    [self captureSession:lastSession];
+}
+
+- (void)endSessionWithTimestamp:(NSDate *)timestamp
+{
+    SentrySession *currentSession = nil;
+    @synchronized(_sessionLock) {
+        currentSession = _session;
+        _session = nil;
+        [self deleteCurrentSession];
+    }
+
+    if (nil == currentSession) {
+        [SentryLog logWithMessage:[NSString stringWithFormat:@"No session to end with timestamp."]
+                         andLevel:kSentryLogLevelDebug];
+        return;
+    }
+
+    [currentSession endSessionExitedWithTimestamp:timestamp];
+    [self captureSession:currentSession];
+}
+
+- (void)storeCurrentSession:(SentrySession *)session
+{
+    [[[self getClient] fileManager] storeCurrentSession:session];
+}
+
+- (void)deleteCurrentSession
+{
+    [[[self getClient] fileManager] deleteCurrentSession];
+}
+
+- (void)closeCachedSessionWithTimestamp:(NSDate *_Nullable)timestamp
+{
+    SentryFileManager *fileManager = [[self getClient] fileManager];
+    SentrySession *session = [fileManager readCurrentSession];
+    if (nil == session) {
+        [SentryLog logWithMessage:@"No cached session to close." andLevel:kSentryLogLevelDebug];
+        return;
+    }
+    [SentryLog logWithMessage:@"A cached session was found." andLevel:kSentryLogLevelDebug];
+
+    // Make sure there's a client bound.
+    SentryClient *client = [self getClient];
+    if (nil == client) {
+        [SentryLog logWithMessage:@"No client bound." andLevel:kSentryLogLevelDebug];
+        return;
+    }
+
+    if (SentryCrash.sharedInstance.crashedLastLaunch) {
+        NSDate *timeSinceLastCrash = [[NSDate date]
+            dateByAddingTimeInterval:-SentryCrash.sharedInstance.activeDurationSinceLastCrash];
+
+        [SentryLog logWithMessage:@"Closing cached session as crashed."
+                         andLevel:kSentryLogLevelDebug];
+
+        [session endSessionCrashedWithTimestamp:timeSinceLastCrash];
+    } else {
+        if (nil == timestamp) {
+            [SentryLog
+                logWithMessage:[NSString stringWithFormat:@"No timestamp to close session "
+                                                          @"was provided. Closing as abnormal. "
+                                                           "Using session's start time %@",
+                                         session.started]
+                      andLevel:kSentryLogLevelDebug];
+            timestamp = session.started;
+            [session endSessionAbnormalWithTimestamp:timestamp];
+        } else {
+            [SentryLog logWithMessage:@"Closing cached session as exited."
+                             andLevel:kSentryLogLevelDebug];
+            [session endSessionExitedWithTimestamp:timestamp];
+        }
+    }
+    [self deleteCurrentSession];
+    [client captureSession:session];
+}
+
+- (void)captureSession:(SentrySession *)session
+{
+    if (nil != session) {
+        SentryClient *client = [self getClient];
+
+        if (SentrySDK.logLevel == kSentryLogLevelVerbose) {
+            NSData *sessionData = [NSJSONSerialization dataWithJSONObject:[session serialize]
+                                                                  options:0
+                                                                    error:nil];
+            NSString *sessionString = [[NSString alloc] initWithData:sessionData
+                                                            encoding:NSUTF8StringEncoding];
+            [SentryLog
+                logWithMessage:[NSString stringWithFormat:@"Capturing session with status: %@",
+                                         sessionString]
+                      andLevel:kSentryLogLevelDebug];
+        }
+        [client captureSession:session];
+    }
+}
+
+- (void)incrementSessionErrors
+{
+    @synchronized(_sessionLock) {
+        if (nil != _session) {
+            [_session incrementErrors];
+            [self storeCurrentSession:_session];
+        }
+    }
+}
+
+- (NSString *_Nullable)captureEvent:(SentryEvent *)event withScope:(SentryScope *_Nullable)scope
+{
     SentryClient *client = [self getClient];
     if (nil != client) {
         return [client captureEvent:event withScope:scope];
@@ -49,7 +173,8 @@
     return nil;
 }
 
-- (NSString *_Nullable)captureMessage:(NSString *)message withScope:(SentryScope *_Nullable)scope {
+- (NSString *_Nullable)captureMessage:(NSString *)message withScope:(SentryScope *_Nullable)scope
+{
     SentryClient *client = [self getClient];
     if (nil != client) {
         return [client captureMessage:message withScope:scope];
@@ -57,7 +182,9 @@
     return nil;
 }
 
-- (NSString *_Nullable)captureError:(NSError *)error withScope:(SentryScope *_Nullable)scope {
+- (NSString *_Nullable)captureError:(NSError *)error withScope:(SentryScope *_Nullable)scope
+{
+    [self incrementSessionErrors];
     SentryClient *client = [self getClient];
     if (nil != client) {
         return [client captureError:error withScope:scope];
@@ -65,7 +192,10 @@
     return nil;
 }
 
-- (NSString *_Nullable)captureException:(NSException *)exception withScope:(SentryScope *_Nullable)scope {
+- (NSString *_Nullable)captureException:(NSException *)exception
+                              withScope:(SentryScope *_Nullable)scope
+{
+    [self incrementSessionErrors];
     SentryClient *client = [self getClient];
     if (nil != client) {
         return [client captureException:exception withScope:scope];
@@ -73,68 +203,63 @@
     return nil;
 }
 
-- (void)addBreadcrumb:(SentryBreadcrumb *)crumb {
+- (void)addBreadcrumb:(SentryBreadcrumb *)crumb
+{
     SentryBeforeBreadcrumbCallback callback = [[[self client] options] beforeBreadcrumb];
     if (nil != callback) {
         crumb = callback(crumb);
     }
     if (nil == crumb) {
-        [SentryLog logWithMessage:[NSString stringWithFormat:@"Discarded Breadcrumb in `beforeBreadcrumb`"] andLevel:kSentryLogLevelDebug];
+        [SentryLog logWithMessage:[NSString stringWithFormat:@"Discarded Breadcrumb "
+                                                             @"in `beforeBreadcrumb`"]
+                         andLevel:kSentryLogLevelDebug];
         return;
     }
-    [self.scope addBreadcrumb:crumb];
+    [[self getScope] addBreadcrumb:crumb];
 }
 
-- (SentryClient *_Nullable)getClient {
+- (SentryClient *_Nullable)getClient
+{
     return self.client;
 }
 
-- (SentryScope *)getScope {
-    if (self.scope == nil) {
-        self.scope = [[SentryScope alloc] init];
-    }
-    return self.scope;
-}
-
-- (void)bindClient:(SentryClient * _Nullable)client {
-    self.client = client;
-    [self doInstallIntegrations];
-}
-
-- (void)configureScope:(void(^)(SentryScope *scope))callback {
-    if (nil != self.client && nil != self.scope) {
-        callback(self.scope);
-    }
-}
-
-/**
- * Install integrations and keeps ref in `SentryHub.integrations`
- */
-- (void)doInstallIntegrations {
-    SentryOptions *options = [self getClient].options;
-    for (NSString *integrationName in [self getClient].options.integrations) {
-        Class integrationClass = NSClassFromString(integrationName);
-        if (nil == integrationClass) {
-            NSString *logMessage = [NSString stringWithFormat:@"[SentryHub doInstallIntegrations] couldn't find \"%@\" -> skipping.", integrationName];
-            [SentryLog logWithMessage:logMessage andLevel:kSentryLogLevelError];
-            continue;
-        } else if ([SentrySDK.currentHub isIntegrationInstalled:integrationClass]) {
-            NSString *logMessage = [NSString stringWithFormat:@"[SentryHub doInstallIntegrations] already installed \"%@\" -> skipping.", integrationName];
-            [SentryLog logWithMessage:logMessage andLevel:kSentryLogLevelError];
-            continue;
+- (SentryScope *)getScope
+{
+    @synchronized(self) {
+        if (self.scope == nil) {
+            SentryClient *client = [self getClient];
+            if (nil != client) {
+                self.scope =
+                    [[SentryScope alloc] initWithMaxBreadcrumbs:client.options.maxBreadcrumbs];
+            } else {
+                self.scope = [[SentryScope alloc] init];
+            }
         }
-        id<SentryIntegrationProtocol> integrationInstance = [[integrationClass alloc] init];
-        [integrationInstance installWithOptions:options];
-        [SentryLog logWithMessage:[NSString stringWithFormat:@"Integration installed: %@", integrationName] andLevel:kSentryLogLevelDebug];
-        [SentrySDK.currentHub.installedIntegrations addObject:integrationInstance];
+        return self.scope;
+    }
+}
+
+- (void)bindClient:(SentryClient *_Nullable)client
+{
+    self.client = client;
+}
+
+- (void)configureScope:(void (^)(SentryScope *scope))callback
+{
+    SentryScope *scope = [self getScope];
+    SentryClient *client = [self getClient];
+    if (nil != client && nil != scope) {
+        callback(scope);
     }
 }
 
 /**
  * Checks if a specific Integration (`integrationClass`) has been installed.
- * @return BOOL If instance of `integrationClass` exists within `SentryHub.installedIntegrations`.
+ * @return BOOL If instance of `integrationClass` exists within
+ * `SentryHub.installedIntegrations`.
  */
-- (BOOL)isIntegrationInstalled:(Class)integrationClass {
+- (BOOL)isIntegrationInstalled:(Class)integrationClass
+{
     for (id<SentryIntegrationProtocol> item in SentrySDK.currentHub.installedIntegrations) {
         if ([item isKindOfClass:integrationClass]) {
             return YES;
@@ -143,12 +268,24 @@
     return NO;
 }
 
-- (id _Nullable)getIntegration:(NSString *)integrationName {
+- (id _Nullable)getIntegration:(NSString *)integrationName
+{
     NSArray *integrations = [self getClient].options.integrations;
     if (![integrations containsObject:integrationName]) {
         return nil;
     }
     return [integrations objectAtIndex:[integrations indexOfObject:integrationName]];
+}
+
+/**
+ * Set global user -> thus will be sent with every event
+ */
+- (void)setUser:(SentryUser *_Nullable)user
+{
+    SentryScope *scope = [self getScope];
+    if (nil != scope) {
+        [scope setUser:user];
+    }
 }
 
 @end

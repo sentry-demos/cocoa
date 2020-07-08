@@ -178,7 +178,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "if which sentry-cli >/dev/null; then\nexport SENTRY_ORG=testorg-az\nexport SENTRY_PROJECT=sentry-cocoa\n#export SENTRY_AUTH_TOKEN=\nRELEASE_VERSION=$(sentry-cli releases propose-version)\n$(sentry-cli releases -o \"$SENTRY_ORG\" new -p \"$SENTRY_PROJECT\" \"$RELEASE_VERSION\")\n$(sentry-cli releases -o \"$SENTRY_ORG\" -p \"$SENTRY_PROJECT\" set-commits --auto \"$RELEASE_VERSION\")\nERROR=$(sentry-cli upload-dif \"$DWARF_DSYM_FOLDER_PATH\" 2>&1 >/dev/null)\nif [ ! $? -eq 0 ]; then\necho \"warning: sentry-cli - $ERROR\"\nfi\nelse\necho \"warning: sentry-cli not installed, download from https://github.com/getsentry/sentry-cli/releases\"\nfi\n";
+			shellScript = "if which sentry-cli >/dev/null; then\nexport SENTRY_ORG=testorg-az\nexport SENTRY_PROJECT=sentry-cocoa\nexport SENTRY_AUTH_TOKEN=ad03024943b44576b58a9c511caa610a1d3c6a69de514a5286723fb6e7109b0d\nRELEASE_VERSION=$(sentry-cli releases propose-version)\n$(sentry-cli releases -o \"$SENTRY_ORG\" new -p \"$SENTRY_PROJECT\" \"$RELEASE_VERSION\")\n$(sentry-cli releases -o \"$SENTRY_ORG\" -p \"$SENTRY_PROJECT\" set-commits --auto \"$RELEASE_VERSION\")\nERROR=$(sentry-cli upload-dif \"$DWARF_DSYM_FOLDER_PATH\" 2>&1 >/dev/null)\nif [ ! $? -eq 0 ]; then\necho \"warning: sentry-cli - $ERROR\"\nfi\nelse\necho \"warning: sentry-cli not installed, download from https://github.com/getsentry/sentry-cli/releases\"\nfi\n";
 		};
 		799D4BCE6EB582F44C251E1D /* [CP] Embed Pods Frameworks */ = {
 			isa = PBXShellScriptBuildPhase;

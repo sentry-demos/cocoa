@@ -12,14 +12,20 @@ Select th sentry-cocoa root folder to open the app profile:
 
 2. sentry-cli must be installed at /usr/local/bin
 
-3. Do not run in debugging mode or else unhandled exceptions won't send to Sentry:  
-Edit Schemes > 'Run' action for your scheme > Info tab > uncheck 'Debug executable' box
+3. XCode Edit Schemes > 'Run' action for your scheme > Info tab > uncheck 'Debug executable' box.  
+This ensures your app doesn't run in debugging mode, in which case unhandled exceptions won't send to Sentry.
 
-3. Click the Run/play button targeting iPhone 11
+4. Click the Run/play button targeting iPhone 11
 
-4. Click on Stop to disconnect the debugger from the app in the simulator
+4. In **Simulator**, Launch the sentry-cocoa app
 
-In **Simulator**, Launch the sentry-cocoa app
+5. Press a button to generate an Error
+
+## How to Upgrade SDK
+Check out a new branch so you can open a PR.    
+1. Xcode -> Podfile, increment the sdk version.
+2. `pod update`
+2. Click 'Play' button
 
 ## Flow/Demo
 
@@ -47,7 +53,8 @@ The demo app enriches every event with: Custom context, breadcrumbs, tags, user 
     
     Upload the Debug Symbols to the target project and associate the commits to the release object.
 
-
 ## Documentation/Resources
 
 https://docs.sentry.io/clients/cocoa/
+
+If you still enter debugging mode by accident, then click 'Stop' which will detach the debugger, then re-launch the app from the touch screen. Do not click 'Play' again or else the debugger will re-attach.
