@@ -58,3 +58,9 @@ The demo app enriches every event with: Custom context, breadcrumbs, tags, user 
 https://docs.sentry.io/clients/cocoa/
 
 If you still enter debugging mode by accident, then click 'Stop' which will detach the debugger, then re-launch the app from the touch screen. Do not click 'Play' again or else the debugger will re-attach.
+
+CrashApplication button makes "EXC_BAD_INSTRUCTION: Fatal error > procpath"
+
+UnhandledException button makes "EXC_BAD_ACCESS:causeCrash: > crash > Attempted to derefer"
+
+Crashes and unhandled exceptions will have stack traces for several threads. Messages and Handled exceptions will have stack trace for top-level thread.
