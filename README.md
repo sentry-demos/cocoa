@@ -15,6 +15,8 @@ Select th sentry-cocoa root folder to open the app profile:
 3. XCode Edit Schemes > 'Run' action for your scheme > Info tab > uncheck 'Debug executable' box.  
 This ensures your app doesn't run in debugging mode, in which case unhandled exceptions won't send to Sentry.
 
+3. Run `pod install` from the terminal
+
 4. Click the Run/play button targeting iPhone 11
 
 4. In **Simulator**, Launch the sentry-cocoa app
