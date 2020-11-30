@@ -74,7 +74,7 @@ class ViewController: UIViewController {
        
    @IBAction func causeRuntimeException(_ sender: Any) {
         let crumb = Breadcrumb()
-        crumb.message = "User clicked the button - UnHandled Exception"
+        crumb.message = "User clicked the button - Unhandled Exception"
         crumb.level = SentryLevel.info
         SentrySDK.addBreadcrumb(crumb: crumb)
     
