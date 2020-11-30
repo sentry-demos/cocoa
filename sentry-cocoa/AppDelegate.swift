@@ -14,15 +14,22 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         // Override point for customization after application launch.
-        
         SentrySDK.start { options in
-            options.dsn = "https://be3a9d11afe54cfea9aa0ced1c18a4e2@o87286.ingest.sentry.io/5316623"
-            options.debug = true
+            options.dsn = "https://62340e8b48bd40dbb4382e0d92ad3385@sentry.io/5175254"
+            options.debug = true // Enabled debug when first installing is always helpful
             options.environment = "Production"
-            options.enableAutoSessionTracking = true
-            options.attachStacktrace = true // so Message has stack trace
+            options.onCrashedLastRun = { event in
+                
+                let userFeedback = UserFeedback(eventId: event.eventId)
+                userFeedback.comments = "It crashed, so I restarted the app and was greeted with a customized user feedback modal"
+                userFeedback.email = "john.love@example.com"
+                userFeedback.name = "John Love"
+                SentrySDK.capture(userFeedback: userFeedback)
+            }
+            // "sampleRate": 0.6
+            // "release": ProcessInfo.processInfo.environment["RELEASE"]
         }
-        
+    
         return true
     }
 
