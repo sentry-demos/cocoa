@@ -26,7 +26,7 @@ This ensures your app doesn't run in debugging mode, in which case unhandled exc
 ## How to Upgrade SDK
 Check out a new branch so you can open a PR.    
 1. Xcode -> Podfile, increment the sdk version.
-2. `pod update`
+2. `pod update`, or `pod install` if pod updating is hanging.
 2. Click 'Play' button
 
 ## Flow/Demo
@@ -54,6 +54,8 @@ The demo app enriches every event with: Custom context, breadcrumbs, tags, user 
 4. Run Scripts:
     
     Upload the Debug Symbols to the target project and associate the commits to the release object.
+
+5. Check for User Feedback collected by the Capture Message and Unhandled Exception buttons
 
 ## Documentation/Resources
 

@@ -38,7 +38,12 @@ class ViewController: UIViewController {
         crumb.level = SentryLevel.info
         SentrySDK.addBreadcrumb(crumb: crumb)
         
-        SentrySDK.capture(message: "Capture this message")
+        let eventId = SentrySDK.capture(message: "Capture this message")
+        let userFeedback = UserFeedback(eventId: eventId)
+        userFeedback.comments = "It broke when I..."
+        userFeedback.email = "john.oxford@example.com"
+        userFeedback.name = "John Oxford"
+        SentrySDK.capture(userFeedback: userFeedback)
     }
     
     @IBAction func causeCrash(_ sender: Any) {
@@ -69,7 +74,7 @@ class ViewController: UIViewController {
        
    @IBAction func causeRuntimeException(_ sender: Any) {
         let crumb = Breadcrumb()
-        crumb.message = "User clicked the button - UnHandled Exception"
+        crumb.message = "User clicked the button - Unhandled Exception"
         crumb.level = SentryLevel.info
         SentrySDK.addBreadcrumb(crumb: crumb)
     
