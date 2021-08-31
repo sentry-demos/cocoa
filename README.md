@@ -1,6 +1,6 @@
 # Cocoa/iOS Demo
 
-## Setup
+## Setup Testing
 
 In **XCode**:
 
