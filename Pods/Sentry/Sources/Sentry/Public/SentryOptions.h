@@ -65,6 +65,12 @@ NS_SWIFT_NAME(Options)
 @property (nonatomic, assign) NSUInteger maxBreadcrumbs;
 
 /**
+ * When enabled, the SDK adds breadcrumbs for each network request. Default value is YES.
+ * As this feature uses swizzling, disabling enableSwizzling also disables this feature.
+ */
+@property (nonatomic, assign) BOOL enableNetworkBreadcrumbs;
+
+/**
  * The maximum number of envelopes to keep in cache. Default is 30.
  */
 @property (nonatomic, assign) NSUInteger maxCacheItems;
@@ -176,6 +182,21 @@ NS_SWIFT_NAME(Options)
 @property (nonatomic, assign) BOOL enableAutoPerformanceTracking;
 
 /**
+ * When enabled, the SDK adds breadcrumbs for HTTP requests and tracks performance for HTTP
+ * requests if auto performance tracking and enableSwizzling are enabled. The default is
+ * <code>YES</code>.
+ */
+@property (nonatomic, assign) BOOL enableNetworkTracking;
+
+/**
+ * This feature is EXPERIMENTAL.
+ *
+ * When enabled, the SDK tracks performance for file IO reads and writes with NSData if auto
+ * performance tracking and enableSwizzling are enabled. The default is <code>NO</code>.
+ */
+@property (nonatomic, assign) BOOL enableFileIOTracking;
+
+/**
  * Indicates the percentage of the tracing data that is collected. Setting this to 0 or NIL discards
  * all trace data, 1.0 collects all trace data, 0.01 collects 1% of all trace data. The default is
  * 0. The value needs to be >= 0.0 and <= 1.0. When setting a value out of range  the SDK sets it to
@@ -229,6 +250,23 @@ NS_SWIFT_NAME(Options)
  * Set as delegate on the NSURLSession used for all network data-transfer tasks performed by Sentry.
  */
 @property (nullable, nonatomic, weak) id<NSURLSessionDelegate> urlSessionDelegate;
+
+/**
+ * Controls if the `tracestate` header is attached to envelopes and HTTP client integrations.
+ *
+ * Note: this is an experimental API and will be removed without notice.
+ */
+@property (nonatomic) BOOL experimentalEnableTraceSampling;
+
+/**
+ * Wether the SDK should use swizzling or not. Default is YES.
+ *
+ * @discussion When turned off the following features are disabled: breadcrumbs for touch events and
+ * navigation with UIViewControllers, automatic instrumentation for UIViewControllers, automatic
+ * instrumentation for HTTP requests, automatic instrumentation for file IO with NSData, and
+ * automatically added sentry-trace header to HTTP requests for distributed tracing.
+ */
+@property (nonatomic, assign) BOOL enableSwizzling;
 
 @end
 

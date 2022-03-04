@@ -1,5 +1,5 @@
 # Cocoa/iOS Demo
-
+sdk 7.10.0
 ## Setup
 
 In **XCode**:

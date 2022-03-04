@@ -2,10 +2,11 @@
 #import "NSDictionary+SentrySanitize.h"
 #import "SentryEnvelopeItemType.h"
 
+NS_ASSUME_NONNULL_BEGIN
+
 @interface
 SentryTransaction ()
 
-@property (nonatomic, strong) id<SentrySpan> trace;
 @property (nonatomic, strong) NSArray<id<SentrySpan>> *spans;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, id> *measurements;
 
@@ -15,7 +16,7 @@ SentryTransaction ()
 
 - (instancetype)initWithTrace:(id<SentrySpan>)trace children:(NSArray<id<SentrySpan>> *)children
 {
-    if ([super init]) {
+    if (self = [super init]) {
         self.timestamp = trace.timestamp;
         self.startTimestamp = trace.startTimestamp;
         self.trace = trace;
@@ -56,3 +57,5 @@ SentryTransaction ()
     return serializedData;
 }
 @end
+
+NS_ASSUME_NONNULL_END

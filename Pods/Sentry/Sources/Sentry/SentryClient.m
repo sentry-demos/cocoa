@@ -28,8 +28,11 @@
 #import "SentrySDK+Private.h"
 #import "SentryScope+Private.h"
 #import "SentryScope.h"
+#import "SentrySpan.h"
 #import "SentryStacktraceBuilder.h"
 #import "SentryThreadInspector.h"
+#import "SentryTraceState.h"
+#import "SentryTracer.h"
 #import "SentryTransaction.h"
 #import "SentryTransport.h"
 #import "SentryTransportFactory.h"
@@ -238,6 +241,25 @@ NSString *const DropSessionLogMessage = @"Session has no release name. Won't sen
                   isCrashEvent:NO];
 }
 
+- (nullable SentryTraceState *)getTraceStateWithEvent:(SentryEvent *)event
+                                            withScope:(SentryScope *)scope
+{
+    id<SentrySpan> span;
+    if ([event isKindOfClass:[SentryTransaction class]]) {
+        span = [(SentryTransaction *)event trace];
+    } else {
+        // Even envelopes without transactions can contain the trace state, allowing Sentry to
+        // eventually sample attachments belonging to a transaction.
+        span = scope.span;
+    }
+
+    SentryTracer *tracer = [SentryTracer getTracer:span];
+    if (tracer == nil)
+        return nil;
+
+    return [[SentryTraceState alloc] initWithTracer:tracer scope:scope options:_options];
+}
+
 - (SentryId *)sendEvent:(SentryEvent *)event
                  withScope:(SentryScope *)scope
     alwaysAttachStacktrace:(BOOL)alwaysAttachStacktrace
@@ -249,7 +271,13 @@ NSString *const DropSessionLogMessage = @"Session has no release name. Won't sen
                                        isCrashEvent:isCrashEvent];
 
     if (nil != preparedEvent) {
-        [self.transport sendEvent:preparedEvent attachments:scope.attachments];
+        SentryTraceState *traceState = _options.experimentalEnableTraceSampling
+            ? [self getTraceStateWithEvent:event withScope:scope]
+            : nil;
+
+        [self.transport sendEvent:preparedEvent
+                       traceState:traceState
+                      attachments:scope.attachments];
         return preparedEvent.eventId;
     }
 
@@ -262,8 +290,12 @@ NSString *const DropSessionLogMessage = @"Session has no release name. Won't sen
 {
     if (nil != event) {
         if (nil == session.releaseName || [session.releaseName length] == 0) {
+            SentryTraceState *traceState = _options.experimentalEnableTraceSampling
+                ? [self getTraceStateWithEvent:event withScope:scope]
+                : nil;
+
             [SentryLog logWithMessage:DropSessionLogMessage andLevel:kSentryLevelDebug];
-            [self.transport sendEvent:event attachments:scope.attachments];
+            [self.transport sendEvent:event traceState:traceState attachments:scope.attachments];
             return event.eventId;
         }
 
@@ -384,14 +416,7 @@ NSString *const DropSessionLogMessage = @"Session has no release name. Won't sen
         event.environment = environment;
     }
 
-    NSMutableDictionary *sdk =
-        @{ @"name" : SentryMeta.sdkName, @"version" : SentryMeta.versionString }.mutableCopy;
-    if (nil != sdk && nil == event.sdk) {
-        if (event.extra[@"__sentry_sdk_integrations"]) {
-            [sdk setValue:event.extra[@"__sentry_sdk_integrations"] forKey:@"integrations"];
-        }
-        event.sdk = sdk;
-    }
+    [self setSdk:event];
 
     // We don't want to attach debug meta and stacktraces for transactions
     BOOL eventIsNotATransaction
@@ -475,6 +500,34 @@ NSString *const DropSessionLogMessage = @"Session has no release name. Won't sen
         }
     }
     return newEvent;
+}
+
+- (void)setSdk:(SentryEvent *)event
+{
+    // Every integration starts with "Sentry" and ends with "Integration". To keep the payload of
+    // the event small we remove both.
+    NSMutableArray<NSString *> *integrations = [NSMutableArray new];
+    for (NSString *integration in self.options.enabledIntegrations) {
+        NSString *withoutSentry = [integration stringByReplacingOccurrencesOfString:@"Sentry"
+                                                                         withString:@""];
+        NSString *trimmed = [withoutSentry stringByReplacingOccurrencesOfString:@"Integration"
+                                                                     withString:@""];
+        [integrations addObject:trimmed];
+    }
+
+    NSMutableDictionary *sdk = @{
+        @"name" : SentryMeta.sdkName,
+        @"version" : SentryMeta.versionString,
+        @"integrations" : integrations
+    }
+                                   .mutableCopy;
+
+    if (nil == event.sdk) {
+        if (event.extra[@"__sentry_sdk_integrations"]) {
+            [sdk setValue:event.extra[@"__sentry_sdk_integrations"] forKey:@"integrations"];
+        }
+        event.sdk = sdk;
+    }
 }
 
 - (void)setUserInfo:(NSDictionary *)userInfo withEvent:(SentryEvent *)event
