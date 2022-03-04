@@ -2,7 +2,7 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-@interface SentryNetworkSwizzling : NSObject
+@interface SentryNSDataSwizzling : NSObject
 
 + (void)start;
 

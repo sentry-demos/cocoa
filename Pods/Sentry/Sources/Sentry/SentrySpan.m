@@ -1,6 +1,7 @@
 #import "SentrySpan.h"
 #import "NSDate+SentryExtras.h"
 #import "SentryCurrentDate.h"
+#import "SentryNoOpSpan.h"
 #import "SentryTraceHeader.h"
 #import "SentryTracer.h"
 
@@ -8,30 +9,20 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface
 SentrySpan ()
-
-@property (nonatomic) SentryTracer *tracer;
-
 @end
 
 @implementation SentrySpan {
-    NSMutableDictionary<NSString *, id> *_extras;
+    NSMutableDictionary<NSString *, id> *_data;
     NSMutableDictionary<NSString *, id> *_tags;
 }
 
-- (instancetype)initWithTracer:(SentryTracer *)tracer context:(SentrySpanContext *)context
+- (instancetype)initWithTransaction:(SentryTracer *)transaction context:(SentrySpanContext *)context
 {
-    if ([self initWithContext:context]) {
-        self.tracer = tracer;
-    }
-    return self;
-}
-
-- (instancetype)initWithContext:(SentrySpanContext *)context
-{
-    if ([super init]) {
+    if (self = [super init]) {
+        _transaction = transaction;
         _context = context;
         self.startTimestamp = [SentryCurrentDate date];
-        _extras = [[NSMutableDictionary alloc] init];
+        _data = [[NSMutableDictionary alloc] init];
         _tags = [[NSMutableDictionary alloc] init];
     }
     return self;
@@ -45,29 +36,38 @@ SentrySpan ()
 - (id<SentrySpan>)startChildWithOperation:(NSString *)operation
                               description:(nullable NSString *)description
 {
-    return [self.tracer startChildWithParentId:[self.context spanId]
-                                     operation:operation
-                                   description:description];
+    if (self.transaction == nil) {
+        return [SentryNoOpSpan shared];
+    }
+
+    return [self.transaction startChildWithParentId:[self.context spanId]
+                                          operation:operation
+                                        description:description];
 }
 
 - (void)setDataValue:(nullable id)value forKey:(NSString *)key
 {
-    @synchronized(_extras) {
-        [_extras setValue:value forKey:key];
+    @synchronized(_data) {
+        [_data setValue:value forKey:key];
     }
+}
+
+- (void)setExtraValue:(nullable id)value forKey:(NSString *)key
+{
+    [self setDataValue:value forKey:key];
 }
 
 - (void)removeDataForKey:(NSString *)key
 {
-    @synchronized(_extras) {
-        [_extras removeObjectForKey:key];
+    @synchronized(_data) {
+        [_data removeObjectForKey:key];
     }
 }
 
 - (nullable NSDictionary<NSString *, id> *)data
 {
-    @synchronized(_extras) {
-        return [_extras copy];
+    @synchronized(_data) {
+        return [_data copy];
     }
 }
 
@@ -99,13 +99,16 @@ SentrySpan ()
 
 - (void)finish
 {
-    self.timestamp = [SentryCurrentDate date];
+    [self finishWithStatus:kSentrySpanStatusOk];
 }
 
 - (void)finishWithStatus:(SentrySpanStatus)status
 {
     self.context.status = status;
-    [self finish];
+    self.timestamp = [SentryCurrentDate date];
+    if (self.transaction != nil) {
+        [self.transaction spanFinished:self];
+    }
 }
 
 - (SentryTraceHeader *)toTraceHeader
@@ -125,9 +128,9 @@ SentrySpan ()
     [mutableDictionary setValue:@(self.startTimestamp.timeIntervalSince1970)
                          forKey:@"start_timestamp"];
 
-    @synchronized(_extras) {
-        if (_extras.count > 0) {
-            mutableDictionary[@"data"] = _extras.copy;
+    @synchronized(_data) {
+        if (_data.count > 0) {
+            mutableDictionary[@"data"] = _data.copy;
         }
     }
 
